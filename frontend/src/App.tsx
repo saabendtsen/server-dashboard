@@ -20,8 +20,23 @@ interface SystemData {
   uptime_seconds: number
 }
 
+interface HealthcheckResult {
+  status_code: number | null
+  latency_ms: number | null
+  error: string | null
+}
+
+interface ServiceData {
+  name: string
+  status: string
+  image: string
+  started_at: string
+  healthcheck: HealthcheckResult | null
+}
+
 interface StatusResponse {
   system: SystemData
+  services: ServiceData[]
   last_updated: string
 }
 
@@ -120,6 +135,93 @@ function ServerOverview({ data }: { data: SystemData }) {
   )
 }
 
+function formatContainerUptime(startedAt: string): string {
+  const started = new Date(startedAt)
+  const now = new Date()
+  const seconds = Math.floor((now.getTime() - started.getTime()) / 1000)
+  return formatUptime(seconds)
+}
+
+function HealthIndicator({ healthcheck }: { healthcheck: HealthcheckResult | null }) {
+  if (!healthcheck) {
+    return (
+      <div data-testid="health-indicator" data-health="none" className="flex items-center gap-1.5">
+        <div className="w-2.5 h-2.5 rounded-full bg-gray-400" />
+        <span className="text-xs text-gray-500 dark:text-gray-400">No check</span>
+      </div>
+    )
+  }
+
+  if (healthcheck.error || !healthcheck.status_code || healthcheck.status_code >= 400) {
+    return (
+      <div data-testid="health-indicator" data-health="unhealthy" className="flex items-center gap-1.5">
+        <div className="w-2.5 h-2.5 rounded-full bg-danger" />
+        <span className="text-xs text-red-600 dark:text-red-400">
+          {healthcheck.error ? healthcheck.error : healthcheck.status_code}
+        </span>
+      </div>
+    )
+  }
+
+  return (
+    <div data-testid="health-indicator" data-health="healthy" className="flex items-center gap-1.5">
+      <div className="w-2.5 h-2.5 rounded-full bg-success" />
+      <span className="text-xs text-green-600 dark:text-green-400">{healthcheck.latency_ms}ms</span>
+    </div>
+  )
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const colorMap: Record<string, string> = {
+    running: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
+    exited: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
+    restarting: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
+  }
+  const color = colorMap[status] || 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
+
+  return (
+    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${color}`}>
+      {status}
+    </span>
+  )
+}
+
+function ServicesTab({ services }: { services: ServiceData[] }) {
+  if (services.length === 0) {
+    return (
+      <div className="bg-white dark:bg-gray-800 rounded-xl p-8 text-center shadow-sm border border-gray-100 dark:border-gray-700">
+        <p className="text-gray-500 dark:text-gray-400">No containers found</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-3">
+      {services.map((service) => (
+        <div
+          key={service.name}
+          data-testid={`service-${service.name}`}
+          className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm border border-gray-100 dark:border-gray-700"
+        >
+          <div className="flex justify-between items-start mb-2">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{service.name}</h3>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{service.image}</p>
+            </div>
+            <StatusBadge status={service.status} />
+          </div>
+          <div className="flex justify-between items-center mt-3">
+            <HealthIndicator healthcheck={service.healthcheck} />
+            <span className="text-xs text-gray-500 dark:text-gray-400">
+              {formatContainerUptime(service.started_at)}
+            </span>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabId>('overview')
   const [data, setData] = useState<StatusResponse | null>(null)
@@ -165,7 +267,11 @@ export default function App() {
           <ServerOverview data={data.system} />
         )}
 
-        {activeTab !== 'overview' && (
+        {activeTab === 'services' && data?.services && (
+          <ServicesTab services={data.services} />
+        )}
+
+        {(activeTab === 'scheduler' || activeTab === 'github') && (
           <div className="bg-white dark:bg-gray-800 rounded-xl p-8 text-center shadow-sm border border-gray-100 dark:border-gray-700">
             <p className="text-gray-500 dark:text-gray-400">Coming soon</p>
           </div>

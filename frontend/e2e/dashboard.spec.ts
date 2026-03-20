@@ -12,6 +12,29 @@ const MOCK_STATUS = {
     memory: { total_bytes: 16_000_000_000, used_bytes: 8_000_000_000, percent: 50.0 },
     uptime_seconds: 172800,
   },
+  services: [
+    {
+      name: 'caddy',
+      status: 'running',
+      image: 'caddy:2.9',
+      started_at: '2026-03-19T10:00:00Z',
+      healthcheck: { status_code: 200, latency_ms: 30.0, error: null },
+    },
+    {
+      name: 'ghost',
+      status: 'running',
+      image: 'ghost:5.118',
+      started_at: '2026-03-18T08:00:00Z',
+      healthcheck: null,
+    },
+    {
+      name: 'old-app',
+      status: 'exited',
+      image: 'myapp:1.0',
+      started_at: '2026-03-15T06:00:00Z',
+      healthcheck: { status_code: null, latency_ms: null, error: 'connection_error' },
+    },
+  ],
   last_updated: '2026-03-20T12:00:00Z',
 }
 
@@ -54,7 +77,33 @@ test('clicking another tab shows Coming soon', async ({ page }) => {
 
   await page.getByRole('tab', { name: 'GitHub Actions' }).click()
   await expect(page.getByText('Coming soon')).toBeVisible()
+})
+
+test('Services tab renders container list with healthcheck indicators', async ({ page }) => {
+  await page.goto('/server-dashboard/')
 
   await page.getByRole('tab', { name: 'Services' }).click()
-  await expect(page.getByText('Coming soon')).toBeVisible()
+
+  // Verify container names are shown
+  await expect(page.getByTestId('service-caddy')).toBeVisible()
+  await expect(page.getByTestId('service-ghost')).toBeVisible()
+  await expect(page.getByTestId('service-old-app')).toBeVisible()
+
+  // Verify status badges
+  const caddyCard = page.getByTestId('service-caddy')
+  await expect(caddyCard.getByText('running')).toBeVisible()
+  await expect(caddyCard.getByText('caddy:2.9')).toBeVisible()
+
+  // Verify healthcheck indicator - green for 200
+  await expect(caddyCard.getByTestId('health-indicator')).toHaveAttribute('data-health', 'healthy')
+  await expect(caddyCard.getByText('30ms')).toBeVisible()
+
+  // Ghost has no healthcheck - grey indicator
+  const ghostCard = page.getByTestId('service-ghost')
+  await expect(ghostCard.getByTestId('health-indicator')).toHaveAttribute('data-health', 'none')
+
+  // old-app has failed healthcheck - red indicator
+  const oldAppCard = page.getByTestId('service-old-app')
+  await expect(oldAppCard.getByTestId('health-indicator')).toHaveAttribute('data-health', 'unhealthy')
+  await expect(oldAppCard.getByText('exited')).toBeVisible()
 })
