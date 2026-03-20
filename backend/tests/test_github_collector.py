@@ -40,6 +40,8 @@ def _build_fake_subprocess(
 
     async def fake_subprocess(*args, **kwargs):
         cmd = args
+        if cmd[0] == "gh" and cmd[1] == "org" and cmd[2] == "list":
+            return _make_process_mock("")  # No orgs in tests
         if cmd[0] == "gh" and cmd[1] == "repo" and cmd[2] == "list":
             return _make_process_mock(repos_json)
 
@@ -187,6 +189,8 @@ async def test_collect_skips_repo_when_workflow_check_fails():
 
     async def fake_subprocess(*args, **kwargs):
         cmd = args
+        if cmd[0] == "gh" and cmd[1] == "org":
+            return _make_process_mock("")
         if cmd[0] == "gh" and cmd[1] == "repo":
             return _make_process_mock(repos_json)
         if cmd[0] == "gh" and cmd[1] == "api":
@@ -220,6 +224,8 @@ async def test_collect_handles_run_list_failure():
 
     async def fake_subprocess(*args, **kwargs):
         cmd = args
+        if cmd[0] == "gh" and cmd[1] == "org":
+            return _make_process_mock("")
         if cmd[0] == "gh" and cmd[1] == "repo":
             return _make_process_mock(repos_json)
         if cmd[0] == "gh" and cmd[1] == "api":

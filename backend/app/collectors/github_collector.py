@@ -27,16 +27,36 @@ async def _run_gh(*args: str) -> str | None:
 
 
 async def _get_repos() -> list[dict[str, Any]]:
-    """Discover all accessible repos via gh repo list."""
+    """Discover all accessible repos via gh repo list (personal + orgs)."""
+    all_repos: list[dict[str, Any]] = []
+
+    # Personal repos
     output = await _run_gh(
         "gh", "repo", "list", "--json", "name,owner", "--limit", "100"
     )
-    if not output:
-        return []
-    try:
-        return json.loads(output)
-    except json.JSONDecodeError:
-        return []
+    if output:
+        try:
+            all_repos.extend(json.loads(output))
+        except json.JSONDecodeError:
+            pass
+
+    # Org repos
+    orgs_output = await _run_gh("gh", "org", "list")
+    if orgs_output:
+        for org in orgs_output.strip().splitlines():
+            org = org.strip()
+            if not org:
+                continue
+            org_output = await _run_gh(
+                "gh", "repo", "list", org, "--json", "name,owner", "--limit", "100"
+            )
+            if org_output:
+                try:
+                    all_repos.extend(json.loads(org_output))
+                except json.JSONDecodeError:
+                    pass
+
+    return all_repos
 
 
 async def _has_workflows(owner: str, repo: str) -> bool:
