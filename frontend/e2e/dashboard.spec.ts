@@ -208,3 +208,63 @@ test('Services tab renders container list with healthcheck indicators', async ({
   await expect(oldAppCard.getByTestId('health-indicator')).toHaveAttribute('data-health', 'unhealthy')
   await expect(oldAppCard.getByText('exited')).toBeVisible()
 })
+
+test('displays last updated timestamp', async ({ page }) => {
+  await page.goto('/server-dashboard/')
+
+  const lastUpdated = page.getByTestId('last-updated')
+  await expect(lastUpdated).toBeVisible()
+  // Should show relative time (the mock date is in the past)
+  await expect(lastUpdated).toContainText('ago')
+})
+
+test('refresh button triggers POST /api/refresh and updates data', async ({ page }) => {
+  const UPDATED_STATUS = {
+    ...MOCK_STATUS,
+    system: {
+      ...MOCK_STATUS.system,
+      cpu_percent: 99.9,
+    },
+    last_updated: new Date().toISOString(),
+  }
+
+  await page.route('**/api/refresh', (route) =>
+    route.fulfill({ json: UPDATED_STATUS })
+  )
+
+  await page.goto('/server-dashboard/')
+
+  // Verify initial CPU value
+  await expect(page.getByTestId('cpu-value')).toHaveText('23.5%')
+
+  // Click refresh button
+  const refreshBtn = page.getByTestId('refresh-button')
+  await expect(refreshBtn).toBeVisible()
+  await refreshBtn.click()
+
+  // After refresh, data should update
+  await expect(page.getByTestId('cpu-value')).toHaveText('99.9%')
+})
+
+test('refresh button shows spinner while refreshing', async ({ page }) => {
+  // Delay the refresh response to observe spinner
+  await page.route('**/api/refresh', async (route) => {
+    await new Promise(r => setTimeout(r, 500))
+    await route.fulfill({ json: MOCK_STATUS })
+  })
+
+  await page.goto('/server-dashboard/')
+
+  const refreshBtn = page.getByTestId('refresh-button')
+  await refreshBtn.click()
+
+  // Spinner should appear
+  await expect(page.getByTestId('refresh-spinner')).toBeVisible()
+
+  // Button should be disabled during refresh
+  await expect(refreshBtn).toBeDisabled()
+
+  // After response, spinner goes away
+  await expect(page.getByTestId('refresh-spinner')).toBeHidden({ timeout: 5000 })
+  await expect(refreshBtn).toBeEnabled()
+})

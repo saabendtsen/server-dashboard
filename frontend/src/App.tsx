@@ -425,6 +425,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<TabId>('overview')
   const [data, setData] = useState<StatusResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
 
   useEffect(() => {
     fetch('/server-dashboard/api/status')
@@ -433,10 +434,56 @@ export default function App() {
       .catch(err => setError(err.message))
   }, [])
 
+  const handleRefresh = async () => {
+    setRefreshing(true)
+    setError(null)
+    try {
+      const res = await fetch('/server-dashboard/api/refresh', { method: 'POST' })
+      const freshData = await res.json()
+      setData(freshData)
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Refresh failed')
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
   return (
     <div className="bg-gray-50 dark:bg-gray-900 min-h-screen">
       <div className="max-w-2xl mx-auto px-4 py-6">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">Server Dashboard</h1>
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Server Dashboard</h1>
+          <div className="flex items-center gap-3">
+            {data?.last_updated && (
+              <span data-testid="last-updated" className="text-xs text-gray-500 dark:text-gray-400">
+                {formatRelativeTime(data.last_updated)}
+              </span>
+            )}
+            <button
+              data-testid="refresh-button"
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-primary text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {refreshing ? (
+                <>
+                  <svg data-testid="refresh-spinner" className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  Refreshing...
+                </>
+              ) : (
+                <>
+                  <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
+                  </svg>
+                  Refresh
+                </>
+              )}
+            </button>
+          </div>
+        </div>
 
         <div className="flex gap-1 mb-6 overflow-x-auto" role="tablist">
           {TABS.map((tab) => (

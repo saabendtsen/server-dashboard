@@ -1,9 +1,71 @@
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.main import app
+
+
+FAKE_SYSTEM = {
+    "disks": [{"mount": "/", "total_bytes": 120_000_000_000, "used_bytes": 60_000_000_000, "percent": 50.0}],
+    "cpu_percent": 10.0,
+    "temperature": 42.0,
+    "load_average": [0.5, 0.3, 0.2],
+    "memory": {"total_bytes": 16_000_000_000, "used_bytes": 8_000_000_000, "percent": 50.0},
+    "uptime_seconds": 86400,
+}
+FAKE_SERVICES = [
+    {
+        "name": "caddy",
+        "status": "running",
+        "image": "caddy:2",
+        "started_at": "2026-03-19T10:00:00Z",
+        "healthcheck": {"status_code": 200, "latency_ms": 30.0, "error": None},
+    },
+    {
+        "name": "ghost",
+        "status": "running",
+        "image": "ghost:5",
+        "started_at": "2026-03-18T08:00:00Z",
+        "healthcheck": None,
+    },
+]
+FAKE_SCHEDULER = {
+    "health": "healthy",
+    "runs": [
+        {
+            "id": 1,
+            "repo": "owner/repo",
+            "issue_number": 10,
+            "session_type": "planning",
+            "started_at": "2026-03-20T10:00:00Z",
+            "ended_at": "2026-03-20T10:30:00Z",
+            "outcome": "completed",
+            "pr_number": None,
+            "notes": None,
+        }
+    ],
+}
+FAKE_GITHUB = [
+    {
+        "repo": "org/my-app",
+        "workflow_name": "CI",
+        "status": "completed",
+        "conclusion": "success",
+        "created_at": "2026-03-20T10:00:00Z",
+    },
+]
+
+
+@pytest.fixture(autouse=True)
+def reset_cache():
+    """Reset cache state before each test."""
+    import app.cache as cache_mod
+    cache_mod._cache = {}
+    cache_mod._last_updated = None
+    yield
+    cache_mod._cache = {}
+    cache_mod._last_updated = None
 
 
 @pytest.mark.asyncio
@@ -17,19 +79,11 @@ async def test_health_returns_ok():
 
 @pytest.mark.asyncio
 async def test_status_returns_system_metrics():
-    fake_system = {
-        "disks": [{"mount": "/", "total_bytes": 120_000_000_000, "used_bytes": 60_000_000_000, "percent": 50.0}],
-        "cpu_percent": 10.0,
-        "temperature": 42.0,
-        "load_average": [0.5, 0.3, 0.2],
-        "memory": {"total_bytes": 16_000_000_000, "used_bytes": 8_000_000_000, "percent": 50.0},
-        "uptime_seconds": 86400,
-    }
     with (
-        patch("app.main.system_collector.collect", return_value=fake_system),
-        patch("app.main.docker_collector.collect", return_value=[]),
-        patch("app.main.scheduler_collector.collect", return_value={"health": "unknown", "runs": []}),
-        patch("app.main.github_collector.collect", return_value=[]),
+        patch("app.cache.system_collector.collect", new_callable=AsyncMock, return_value=FAKE_SYSTEM),
+        patch("app.cache.docker_collector.collect", new_callable=AsyncMock, return_value=[]),
+        patch("app.cache.scheduler_collector.collect", new_callable=AsyncMock, return_value={"health": "unknown", "runs": []}),
+        patch("app.cache.github_collector.collect", new_callable=AsyncMock, return_value=[]),
     ):
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -44,35 +98,11 @@ async def test_status_returns_system_metrics():
 
 @pytest.mark.asyncio
 async def test_status_returns_services():
-    fake_system = {
-        "disks": [],
-        "cpu_percent": 5.0,
-        "temperature": None,
-        "load_average": [0.1, 0.1, 0.1],
-        "memory": {"total_bytes": 16_000_000_000, "used_bytes": 4_000_000_000, "percent": 25.0},
-        "uptime_seconds": 3600,
-    }
-    fake_services = [
-        {
-            "name": "caddy",
-            "status": "running",
-            "image": "caddy:2",
-            "started_at": "2026-03-19T10:00:00Z",
-            "healthcheck": {"status_code": 200, "latency_ms": 30.0, "error": None},
-        },
-        {
-            "name": "ghost",
-            "status": "running",
-            "image": "ghost:5",
-            "started_at": "2026-03-18T08:00:00Z",
-            "healthcheck": None,
-        },
-    ]
     with (
-        patch("app.main.system_collector.collect", return_value=fake_system),
-        patch("app.main.docker_collector.collect", return_value=fake_services),
-        patch("app.main.scheduler_collector.collect", return_value={"health": "unknown", "runs": []}),
-        patch("app.main.github_collector.collect", return_value=[]),
+        patch("app.cache.system_collector.collect", new_callable=AsyncMock, return_value=FAKE_SYSTEM),
+        patch("app.cache.docker_collector.collect", new_callable=AsyncMock, return_value=FAKE_SERVICES),
+        patch("app.cache.scheduler_collector.collect", new_callable=AsyncMock, return_value={"health": "unknown", "runs": []}),
+        patch("app.cache.github_collector.collect", new_callable=AsyncMock, return_value=[]),
     ):
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -89,35 +119,11 @@ async def test_status_returns_services():
 
 @pytest.mark.asyncio
 async def test_status_returns_scheduler():
-    fake_system = {
-        "disks": [],
-        "cpu_percent": 5.0,
-        "temperature": None,
-        "load_average": [0.1, 0.1, 0.1],
-        "memory": {"total_bytes": 16_000_000_000, "used_bytes": 4_000_000_000, "percent": 25.0},
-        "uptime_seconds": 3600,
-    }
-    fake_scheduler = {
-        "health": "healthy",
-        "runs": [
-            {
-                "id": 1,
-                "repo": "owner/repo",
-                "issue_number": 10,
-                "session_type": "planning",
-                "started_at": "2026-03-20T10:00:00Z",
-                "ended_at": "2026-03-20T10:30:00Z",
-                "outcome": "completed",
-                "pr_number": None,
-                "notes": None,
-            }
-        ],
-    }
     with (
-        patch("app.main.system_collector.collect", return_value=fake_system),
-        patch("app.main.docker_collector.collect", return_value=[]),
-        patch("app.main.scheduler_collector.collect", return_value=fake_scheduler),
-        patch("app.main.github_collector.collect", return_value=[]),
+        patch("app.cache.system_collector.collect", new_callable=AsyncMock, return_value=FAKE_SYSTEM),
+        patch("app.cache.docker_collector.collect", new_callable=AsyncMock, return_value=[]),
+        patch("app.cache.scheduler_collector.collect", new_callable=AsyncMock, return_value=FAKE_SCHEDULER),
+        patch("app.cache.github_collector.collect", new_callable=AsyncMock, return_value=[]),
     ):
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -133,28 +139,11 @@ async def test_status_returns_scheduler():
 
 @pytest.mark.asyncio
 async def test_status_returns_github_actions():
-    fake_system = {
-        "disks": [],
-        "cpu_percent": 5.0,
-        "temperature": None,
-        "load_average": [0.1, 0.1, 0.1],
-        "memory": {"total_bytes": 16_000_000_000, "used_bytes": 4_000_000_000, "percent": 25.0},
-        "uptime_seconds": 3600,
-    }
-    fake_github = [
-        {
-            "repo": "org/my-app",
-            "workflow_name": "CI",
-            "status": "completed",
-            "conclusion": "success",
-            "created_at": "2026-03-20T10:00:00Z",
-        },
-    ]
     with (
-        patch("app.main.system_collector.collect", return_value=fake_system),
-        patch("app.main.docker_collector.collect", return_value=[]),
-        patch("app.main.scheduler_collector.collect", return_value={"health": "unknown", "runs": []}),
-        patch("app.main.github_collector.collect", return_value=fake_github),
+        patch("app.cache.system_collector.collect", new_callable=AsyncMock, return_value=FAKE_SYSTEM),
+        patch("app.cache.docker_collector.collect", new_callable=AsyncMock, return_value=[]),
+        patch("app.cache.scheduler_collector.collect", new_callable=AsyncMock, return_value={"health": "unknown", "runs": []}),
+        patch("app.cache.github_collector.collect", new_callable=AsyncMock, return_value=FAKE_GITHUB),
     ):
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -166,3 +155,27 @@ async def test_status_returns_github_actions():
     assert len(data["github_actions"]) == 1
     assert data["github_actions"][0]["repo"] == "org/my-app"
     assert data["github_actions"][0]["conclusion"] == "success"
+
+
+@pytest.mark.asyncio
+async def test_status_returns_cached_data_on_second_call():
+    """When cache is populated, /api/status returns cached data without calling collectors."""
+    from app.cache import update_cache
+
+    cached_data = {
+        "system": FAKE_SYSTEM,
+        "services": FAKE_SERVICES,
+        "scheduler": FAKE_SCHEDULER,
+        "github_actions": FAKE_GITHUB,
+    }
+    update_cache(cached_data)
+
+    # No patches needed - collectors should NOT be called
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/api/status")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["system"]["cpu_percent"] == 10.0
+    assert "last_updated" in data
