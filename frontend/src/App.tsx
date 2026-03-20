@@ -34,9 +34,27 @@ interface ServiceData {
   healthcheck: HealthcheckResult | null
 }
 
+interface SchedulerRun {
+  id: number
+  repo: string
+  issue_number: number
+  session_type: string
+  started_at: string
+  ended_at: string
+  outcome: string
+  pr_number: number | null
+  notes: string | null
+}
+
+interface SchedulerData {
+  health: string
+  runs: SchedulerRun[]
+}
+
 interface StatusResponse {
   system: SystemData
   services: ServiceData[]
+  scheduler: SchedulerData
   last_updated: string
 }
 
@@ -222,6 +240,108 @@ function ServicesTab({ services }: { services: ServiceData[] }) {
   )
 }
 
+function OutcomeBadge({ outcome }: { outcome: string }) {
+  const colorMap: Record<string, string> = {
+    completed: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
+    failed: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
+    clarification: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
+    timeout: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
+    running: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
+  }
+  const color = colorMap[outcome] || 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
+
+  return (
+    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${color}`}>
+      {outcome}
+    </span>
+  )
+}
+
+function SchedulerHealthBadge({ health }: { health: string }) {
+  const config: Record<string, { color: string; label: string }> = {
+    healthy: { color: 'bg-success', label: 'Healthy' },
+    unhealthy: { color: 'bg-danger', label: 'Unhealthy' },
+    warning: { color: 'bg-yellow-500', label: 'Warning' },
+    unknown: { color: 'bg-gray-400', label: 'Unknown' },
+  }
+  const { color, label } = config[health] || config.unknown
+
+  return (
+    <div data-testid="scheduler-health-badge" data-health={health} className="flex items-center gap-2">
+      <div className={`w-3 h-3 rounded-full ${color}`} />
+      <span className="text-sm font-medium text-gray-900 dark:text-white">{label}</span>
+    </div>
+  )
+}
+
+function formatTimestamp(ts: string): string {
+  const d = new Date(ts)
+  return d.toLocaleString('da-DK', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
+function repoShortName(repo: string): string {
+  const parts = repo.split('/')
+  return parts.length > 1 ? parts[1] : repo
+}
+
+function SchedulerTab({ scheduler }: { scheduler: SchedulerData }) {
+  return (
+    <div className="space-y-4">
+      <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm border border-gray-100 dark:border-gray-700">
+        <SchedulerHealthBadge health={scheduler.health} />
+      </div>
+
+      {scheduler.runs.length === 0 ? (
+        <div className="bg-white dark:bg-gray-800 rounded-xl p-8 text-center shadow-sm border border-gray-100 dark:border-gray-700">
+          <p className="text-gray-500 dark:text-gray-400">No runs recorded</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {scheduler.runs.map((run) => (
+            <div
+              key={run.id}
+              data-testid="scheduler-run"
+              className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm border border-gray-100 dark:border-gray-700"
+            >
+              <div className="flex justify-between items-start mb-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold text-gray-900 dark:text-white">{repoShortName(run.repo)}</span>
+                  <a
+                    href={`https://github.com/${run.repo}/issues/${run.issue_number}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-primary hover:underline"
+                  >
+                    #{run.issue_number}
+                  </a>
+                  {run.pr_number && (
+                    <a
+                      href={`https://github.com/${run.repo}/pull/${run.pr_number}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-primary hover:underline"
+                    >
+                      #{run.pr_number}
+                    </a>
+                  )}
+                </div>
+                <OutcomeBadge outcome={run.outcome} />
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-gray-500 dark:text-gray-400">{run.session_type}</span>
+                <span className="text-xs text-gray-500 dark:text-gray-400">
+                  {formatTimestamp(run.started_at)}
+                  {run.ended_at && ` - ${formatTimestamp(run.ended_at)}`}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabId>('overview')
   const [data, setData] = useState<StatusResponse | null>(null)
@@ -271,7 +391,11 @@ export default function App() {
           <ServicesTab services={data.services} />
         )}
 
-        {(activeTab === 'scheduler' || activeTab === 'github') && (
+        {activeTab === 'scheduler' && data?.scheduler && (
+          <SchedulerTab scheduler={data.scheduler} />
+        )}
+
+        {activeTab === 'github' && (
           <div className="bg-white dark:bg-gray-800 rounded-xl p-8 text-center shadow-sm border border-gray-100 dark:border-gray-700">
             <p className="text-gray-500 dark:text-gray-400">Coming soon</p>
           </div>

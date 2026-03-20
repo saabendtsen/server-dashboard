@@ -28,6 +28,7 @@ async def test_status_returns_system_metrics():
     with (
         patch("app.main.system_collector.collect", return_value=fake_system),
         patch("app.main.docker_collector.collect", return_value=[]),
+        patch("app.main.scheduler_collector.collect", return_value={"health": "unknown", "runs": []}),
     ):
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -69,6 +70,7 @@ async def test_status_returns_services():
     with (
         patch("app.main.system_collector.collect", return_value=fake_system),
         patch("app.main.docker_collector.collect", return_value=fake_services),
+        patch("app.main.scheduler_collector.collect", return_value={"health": "unknown", "runs": []}),
     ):
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -81,3 +83,46 @@ async def test_status_returns_services():
     assert data["services"][0]["name"] == "caddy"
     assert data["services"][0]["healthcheck"]["status_code"] == 200
     assert data["services"][1]["healthcheck"] is None
+
+
+@pytest.mark.asyncio
+async def test_status_returns_scheduler():
+    fake_system = {
+        "disks": [],
+        "cpu_percent": 5.0,
+        "temperature": None,
+        "load_average": [0.1, 0.1, 0.1],
+        "memory": {"total_bytes": 16_000_000_000, "used_bytes": 4_000_000_000, "percent": 25.0},
+        "uptime_seconds": 3600,
+    }
+    fake_scheduler = {
+        "health": "healthy",
+        "runs": [
+            {
+                "id": 1,
+                "repo": "owner/repo",
+                "issue_number": 10,
+                "session_type": "planning",
+                "started_at": "2026-03-20T10:00:00Z",
+                "ended_at": "2026-03-20T10:30:00Z",
+                "outcome": "completed",
+                "pr_number": None,
+                "notes": None,
+            }
+        ],
+    }
+    with (
+        patch("app.main.system_collector.collect", return_value=fake_system),
+        patch("app.main.docker_collector.collect", return_value=[]),
+        patch("app.main.scheduler_collector.collect", return_value=fake_scheduler),
+    ):
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.get("/api/status")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert "scheduler" in data
+    assert data["scheduler"]["health"] == "healthy"
+    assert len(data["scheduler"]["runs"]) == 1
+    assert data["scheduler"]["runs"][0]["repo"] == "owner/repo"

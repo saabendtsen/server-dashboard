@@ -35,6 +35,33 @@ const MOCK_STATUS = {
       healthcheck: { status_code: null, latency_ms: null, error: 'connection_error' },
     },
   ],
+  scheduler: {
+    health: 'healthy',
+    runs: [
+      {
+        id: 89,
+        repo: 'Wibholm-solutions/dilemma',
+        issue_number: 13,
+        session_type: 'planning',
+        started_at: '2026-03-20T10:20:03Z',
+        ended_at: '2026-03-20T10:22:31Z',
+        outcome: 'completed',
+        pr_number: null,
+        notes: null,
+      },
+      {
+        id: 88,
+        repo: 'saabendtsen/ai-scheduler',
+        issue_number: 5,
+        session_type: 'implementation',
+        started_at: '2026-03-19T09:48:06Z',
+        ended_at: '2026-03-19T09:49:43Z',
+        outcome: 'failed',
+        pr_number: 12,
+        notes: null,
+      },
+    ],
+  },
   last_updated: '2026-03-20T12:00:00Z',
 }
 
@@ -69,14 +96,45 @@ test('Server Overview tab displays system metrics', async ({ page }) => {
   await expect(page.getByTestId('uptime-value')).toHaveText('2d 0h')
 })
 
-test('clicking another tab shows Coming soon', async ({ page }) => {
+test('GitHub Actions tab shows Coming soon', async ({ page }) => {
   await page.goto('/server-dashboard/')
-
-  await page.getByRole('tab', { name: 'AI Scheduler' }).click()
-  await expect(page.getByText('Coming soon')).toBeVisible()
 
   await page.getByRole('tab', { name: 'GitHub Actions' }).click()
   await expect(page.getByText('Coming soon')).toBeVisible()
+})
+
+test('AI Scheduler tab renders health badge and run list', async ({ page }) => {
+  await page.goto('/server-dashboard/')
+
+  await page.getByRole('tab', { name: 'AI Scheduler' }).click()
+
+  // Health badge
+  const badge = page.getByTestId('scheduler-health-badge')
+  await expect(badge).toBeVisible()
+  await expect(badge).toHaveAttribute('data-health', 'healthy')
+
+  // Run list
+  const runs = page.getByTestId('scheduler-run')
+  await expect(runs).toHaveCount(2)
+
+  // First run (newest) - completed planning
+  const firstRun = runs.nth(0)
+  await expect(firstRun.getByText('completed')).toBeVisible()
+  await expect(firstRun.getByText('planning')).toBeVisible()
+  await expect(firstRun.getByText('dilemma')).toBeVisible()
+
+  // Issue link
+  const issueLink = firstRun.getByRole('link', { name: '#13' })
+  await expect(issueLink).toHaveAttribute('href', 'https://github.com/Wibholm-solutions/dilemma/issues/13')
+
+  // Second run - failed implementation with PR
+  const secondRun = runs.nth(1)
+  await expect(secondRun.getByText('failed')).toBeVisible()
+  await expect(secondRun.getByText('implementation')).toBeVisible()
+
+  // PR link
+  const prLink = secondRun.getByRole('link', { name: '#12' })
+  await expect(prLink).toHaveAttribute('href', 'https://github.com/saabendtsen/ai-scheduler/pull/12')
 })
 
 test('Services tab renders container list with healthcheck indicators', async ({ page }) => {
