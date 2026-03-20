@@ -1,9 +1,13 @@
+import os
 from pathlib import Path
 from typing import Any
 
 import aiosqlite
 
-DEFAULT_DB_PATH = str(Path.home() / "apps" / "ai-scheduler" / "history.db")
+DEFAULT_DB_PATH = os.environ.get(
+    "SCHEDULER_DB_PATH",
+    str(Path.home() / "apps" / "ai-scheduler" / "history.db"),
+)
 
 HEALTH_MAP = {
     "completed": "healthy",
