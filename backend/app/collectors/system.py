@@ -9,7 +9,10 @@ MONITORED_MOUNTS = ["/", "/data"]
 async def collect() -> dict[str, Any]:
     disks = []
     for mount in MONITORED_MOUNTS:
-        usage = psutil.disk_usage(mount)
+        try:
+            usage = psutil.disk_usage(mount)
+        except (FileNotFoundError, OSError):
+            continue
         disks.append({
             "mount": mount,
             "total_bytes": usage.total,
