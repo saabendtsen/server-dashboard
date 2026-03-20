@@ -62,6 +62,29 @@ const MOCK_STATUS = {
       },
     ],
   },
+  github_actions: [
+    {
+      repo: 'org/my-app',
+      workflow_name: 'CI',
+      status: 'completed',
+      conclusion: 'success',
+      created_at: '2026-03-20T11:00:00Z',
+    },
+    {
+      repo: 'org/other-app',
+      workflow_name: 'Deploy',
+      status: 'in_progress',
+      conclusion: '',
+      created_at: '2026-03-20T10:30:00Z',
+    },
+    {
+      repo: 'org/my-app',
+      workflow_name: 'Lint',
+      status: 'completed',
+      conclusion: 'failure',
+      created_at: '2026-03-20T09:00:00Z',
+    },
+  ],
   last_updated: '2026-03-20T12:00:00Z',
 }
 
@@ -96,11 +119,31 @@ test('Server Overview tab displays system metrics', async ({ page }) => {
   await expect(page.getByTestId('uptime-value')).toHaveText('2d 0h')
 })
 
-test('GitHub Actions tab shows Coming soon', async ({ page }) => {
+test('GitHub Actions tab renders workflow runs with status colors', async ({ page }) => {
   await page.goto('/server-dashboard/')
 
   await page.getByRole('tab', { name: 'GitHub Actions' }).click()
-  await expect(page.getByText('Coming soon')).toBeVisible()
+
+  // Should show 3 runs
+  const runs = page.getByTestId('github-run')
+  await expect(runs).toHaveCount(3)
+
+  // First run: success (green)
+  const firstRun = runs.nth(0)
+  await expect(firstRun.getByText('my-app')).toBeVisible()
+  await expect(firstRun.getByText('CI')).toBeVisible()
+  await expect(firstRun.getByTestId('github-status')).toHaveAttribute('data-conclusion', 'success')
+
+  // Second run: in_progress (yellow)
+  const secondRun = runs.nth(1)
+  await expect(secondRun.getByText('other-app')).toBeVisible()
+  await expect(secondRun.getByText('Deploy')).toBeVisible()
+  await expect(secondRun.getByTestId('github-status')).toHaveAttribute('data-status', 'in_progress')
+
+  // Third run: failure (red)
+  const thirdRun = runs.nth(2)
+  await expect(thirdRun.getByText('Lint')).toBeVisible()
+  await expect(thirdRun.getByTestId('github-status')).toHaveAttribute('data-conclusion', 'failure')
 })
 
 test('AI Scheduler tab renders health badge and run list', async ({ page }) => {

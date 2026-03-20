@@ -29,6 +29,7 @@ async def test_status_returns_system_metrics():
         patch("app.main.system_collector.collect", return_value=fake_system),
         patch("app.main.docker_collector.collect", return_value=[]),
         patch("app.main.scheduler_collector.collect", return_value={"health": "unknown", "runs": []}),
+        patch("app.main.github_collector.collect", return_value=[]),
     ):
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -71,6 +72,7 @@ async def test_status_returns_services():
         patch("app.main.system_collector.collect", return_value=fake_system),
         patch("app.main.docker_collector.collect", return_value=fake_services),
         patch("app.main.scheduler_collector.collect", return_value={"health": "unknown", "runs": []}),
+        patch("app.main.github_collector.collect", return_value=[]),
     ):
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -115,6 +117,7 @@ async def test_status_returns_scheduler():
         patch("app.main.system_collector.collect", return_value=fake_system),
         patch("app.main.docker_collector.collect", return_value=[]),
         patch("app.main.scheduler_collector.collect", return_value=fake_scheduler),
+        patch("app.main.github_collector.collect", return_value=[]),
     ):
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -126,3 +129,40 @@ async def test_status_returns_scheduler():
     assert data["scheduler"]["health"] == "healthy"
     assert len(data["scheduler"]["runs"]) == 1
     assert data["scheduler"]["runs"][0]["repo"] == "owner/repo"
+
+
+@pytest.mark.asyncio
+async def test_status_returns_github_actions():
+    fake_system = {
+        "disks": [],
+        "cpu_percent": 5.0,
+        "temperature": None,
+        "load_average": [0.1, 0.1, 0.1],
+        "memory": {"total_bytes": 16_000_000_000, "used_bytes": 4_000_000_000, "percent": 25.0},
+        "uptime_seconds": 3600,
+    }
+    fake_github = [
+        {
+            "repo": "org/my-app",
+            "workflow_name": "CI",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-03-20T10:00:00Z",
+        },
+    ]
+    with (
+        patch("app.main.system_collector.collect", return_value=fake_system),
+        patch("app.main.docker_collector.collect", return_value=[]),
+        patch("app.main.scheduler_collector.collect", return_value={"health": "unknown", "runs": []}),
+        patch("app.main.github_collector.collect", return_value=fake_github),
+    ):
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.get("/api/status")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert "github_actions" in data
+    assert len(data["github_actions"]) == 1
+    assert data["github_actions"][0]["repo"] == "org/my-app"
+    assert data["github_actions"][0]["conclusion"] == "success"

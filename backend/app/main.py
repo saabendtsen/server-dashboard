@@ -7,6 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from app.collectors import system as system_collector
 from app.collectors import docker_collector
 from app.collectors import scheduler_collector
+from app.collectors import github_collector
 
 app = FastAPI(title="Server Dashboard")
 
@@ -23,10 +24,12 @@ async def status():
     system_data = await system_collector.collect()
     services_data = await docker_collector.collect()
     scheduler_data = await scheduler_collector.collect()
+    github_data = await github_collector.collect()
     return {
         "system": system_data,
         "services": services_data,
         "scheduler": scheduler_data,
+        "github_actions": github_data,
         "last_updated": datetime.now(timezone.utc).isoformat(),
     }
 
