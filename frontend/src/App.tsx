@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { FeedbackButton } from './components/FeedbackButton'
 
 type TabId = 'overview' | 'scheduler' | 'github' | 'services'
 
@@ -525,6 +526,10 @@ export default function App() {
           <GitHubActionsTab runs={data.github_actions} />
         )}
       </div>
+      <FeedbackButton
+        repo="saabendtsen/server-dashboard"
+        apiUrl="https://wibholmsolutions.com/api/feedback"
+      />
     </div>
   )
 }
