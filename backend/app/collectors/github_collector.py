@@ -53,6 +53,37 @@ async def _has_workflows(owner: str, repo: str) -> bool:
         return False
 
 
+async def _uses_self_hosted(owner: str, repo: str) -> bool:
+    """Check if a repo's most recent run used a self-hosted runner."""
+    output = await _run_gh(
+        "gh", "api", f"repos/{owner}/{repo}/actions/runs?per_page=1"
+    )
+    if not output:
+        return False
+    try:
+        data = json.loads(output)
+        runs = data.get("workflow_runs", [])
+        if not runs:
+            return False
+        run_id = runs[0]["id"]
+    except (json.JSONDecodeError, KeyError, IndexError):
+        return False
+
+    jobs_output = await _run_gh(
+        "gh", "api", f"repos/{owner}/{repo}/actions/runs/{run_id}/jobs"
+    )
+    if not jobs_output:
+        return False
+    try:
+        jobs_data = json.loads(jobs_output)
+        for job in jobs_data.get("jobs", []):
+            if "self-hosted" in job.get("labels", []):
+                return True
+    except (json.JSONDecodeError, KeyError):
+        pass
+    return False
+
+
 async def _get_runs(owner: str, repo: str) -> list[dict[str, Any]]:
     """Fetch recent workflow runs for a repo."""
     output = await _run_gh(
@@ -101,9 +132,15 @@ async def collect() -> list[dict[str, Any]]:
         if await coro:
             repos_with_workflows.append((owner, name))
 
-    # Fetch runs from all repos with workflows
-    all_runs: list[dict[str, Any]] = []
+    # Filter to repos using self-hosted runner
+    self_hosted_repos = []
     for owner, name in repos_with_workflows:
+        if await _uses_self_hosted(owner, name):
+            self_hosted_repos.append((owner, name))
+
+    # Fetch runs from self-hosted repos
+    all_runs: list[dict[str, Any]] = []
+    for owner, name in self_hosted_repos:
         runs = await _get_runs(owner, name)
         all_runs.extend(runs)
 

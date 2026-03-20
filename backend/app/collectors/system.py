@@ -3,18 +3,29 @@ from typing import Any
 
 import psutil
 
-MONITORED_MOUNTS = ["/", "/data"]
+MONITORED_MOUNTS = [
+    {"path": "/host-root", "label": "/", "fallback": "/"},
+    {"path": "/data", "label": "/data"},
+]
 
 
 async def collect() -> dict[str, Any]:
     disks = []
     for mount in MONITORED_MOUNTS:
+        path = mount["path"]
         try:
-            usage = psutil.disk_usage(mount)
+            usage = psutil.disk_usage(path)
         except (FileNotFoundError, OSError):
-            continue
+            fallback = mount.get("fallback")
+            if fallback:
+                try:
+                    usage = psutil.disk_usage(fallback)
+                except (FileNotFoundError, OSError):
+                    continue
+            else:
+                continue
         disks.append({
-            "mount": mount,
+            "mount": mount["label"],
             "total_bytes": usage.total,
             "used_bytes": usage.used,
             "percent": usage.percent,

@@ -6,7 +6,7 @@ from app.collectors.system import collect
 
 
 def _mock_disk_usage(path):
-    if path == "/":
+    if path == "/host-root":
         return MagicMock(total=120_000_000_000, used=60_000_000_000, percent=50.0)
     elif path == "/data":
         return MagicMock(total=256_000_000_000, used=100_000_000_000, percent=39.1)
