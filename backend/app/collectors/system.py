@@ -31,7 +31,7 @@ async def collect() -> dict[str, Any]:
             "percent": usage.percent,
         })
 
-    cpu_percent = psutil.cpu_percent(interval=None)
+    cpu_percent = psutil.cpu_percent(interval=1)
 
     temp = None
     temps = psutil.sensors_temperatures()
