@@ -11,13 +11,16 @@ async def _run_gh(*args: str) -> str | None:
     if token:
         env["GITHUB_TOKEN"] = token
 
-    proc = await asyncio.create_subprocess_exec(
-        *args,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-        env=env,
-    )
-    stdout, _ = await proc.communicate()
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *args,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env=env,
+        )
+        stdout, _ = await proc.communicate()
+    except (FileNotFoundError, OSError):
+        return None
     if proc.returncode != 0:
         return None
     return stdout.decode()
