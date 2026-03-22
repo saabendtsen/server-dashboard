@@ -7,3 +7,5 @@ dist/
 .env
 *.egg-info/
 .pytest_cache/
+.worktrees/
+test-results/
