@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, patch, MagicMock
 import httpx
 import pytest
 
-from app.collectors.health_checker import check
+from app.collectors.health_checker import check, _resolve_url
 
 
 @pytest.mark.asyncio
@@ -71,3 +71,13 @@ async def test_check_returns_non_200_status():
     assert result["status_code"] == 503
     assert result["latency_ms"] == 120.0
     assert result["error"] is None
+
+
+@pytest.mark.parametrize("input_url,expected", [
+    ("http://localhost:8080/health", "http://host.docker.internal:8080/health"),
+    ("http://127.0.0.1:9090/api/health", "http://host.docker.internal:9090/api/health"),
+    ("http://myservice:3000/health", "http://myservice:3000/health"),
+    ("https://localhost:443/health", "https://host.docker.internal:443/health"),
+])
+def test_resolve_url(input_url, expected):
+    assert _resolve_url(input_url) == expected
