@@ -1,72 +1,7 @@
 import { useState, useEffect } from 'react'
 import { FeedbackButton } from './components/FeedbackButton'
-
-type TabId = 'overview' | 'scheduler' | 'github' | 'services'
-
-interface SystemData {
-  disks: Array<{
-    mount: string
-    total_bytes: number
-    used_bytes: number
-    percent: number
-  }>
-  cpu_percent: number
-  temperature: number | null
-  load_average: number[]
-  memory: {
-    total_bytes: number
-    used_bytes: number
-    percent: number
-  }
-  uptime_seconds: number
-}
-
-interface HealthcheckResult {
-  status_code: number | null
-  latency_ms: number | null
-  error: string | null
-}
-
-interface ServiceData {
-  name: string
-  status: string
-  image: string
-  started_at: string
-  healthcheck: HealthcheckResult | null
-}
-
-interface SchedulerRun {
-  id: number
-  repo: string
-  issue_number: number
-  session_type: string
-  started_at: string
-  ended_at: string
-  outcome: string
-  pr_number: number | null
-  notes: string | null
-}
-
-interface SchedulerData {
-  health: string
-  runs: SchedulerRun[]
-}
-
-interface GitHubRun {
-  repo: string
-  workflow_name: string
-  status: string
-  conclusion: string
-  created_at: string
-}
-
-interface StatusResponse {
-  system: SystemData
-  services: ServiceData[]
-  scheduler: SchedulerData
-  github_actions: GitHubRun[]
-  last_updated: string
-}
+import type { TabId, SystemData, HealthcheckResult, ServiceData, SchedulerData, GitHubRun, StatusResponse } from './types'
+import { formatBytes, formatUptime, formatContainerUptime, formatTimestamp, formatRelativeTime, repoShortName } from './utils/formatters'
 
 const TABS: { id: TabId; label: string }[] = [
   { id: 'overview', label: 'Server Overview' },
@@ -74,17 +9,6 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'github', label: 'GitHub Actions' },
   { id: 'services', label: 'Services' },
 ]
-
-function formatBytes(bytes: number): string {
-  const gb = bytes / (1024 ** 3)
-  return `${gb.toFixed(1)} GB`
-}
-
-function formatUptime(seconds: number): string {
-  const days = Math.floor(seconds / 86400)
-  const hours = Math.floor((seconds % 86400) / 3600)
-  return `${days}d ${hours}h`
-}
 
 function DiskGauge({ mount, percent, used_bytes, total_bytes }: {
   mount: string; percent: number; used_bytes: number; total_bytes: number
@@ -162,13 +86,6 @@ function ServerOverview({ data }: { data: SystemData }) {
       </div>
     </div>
   )
-}
-
-function formatContainerUptime(startedAt: string): string {
-  const started = new Date(startedAt)
-  const now = new Date()
-  const seconds = Math.floor((now.getTime() - started.getTime()) / 1000)
-  return formatUptime(seconds)
 }
 
 function HealthIndicator({ healthcheck }: { healthcheck: HealthcheckResult | null }) {
@@ -285,16 +202,6 @@ function SchedulerHealthBadge({ health }: { health: string }) {
   )
 }
 
-function formatTimestamp(ts: string): string {
-  const d = new Date(ts)
-  return d.toLocaleString('da-DK', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-}
-
-function repoShortName(repo: string): string {
-  const parts = repo.split('/')
-  return parts.length > 1 ? parts[1] : repo
-}
-
 function SchedulerTab({ scheduler }: { scheduler: SchedulerData }) {
   return (
     <div className="space-y-4">
@@ -351,19 +258,6 @@ function SchedulerTab({ scheduler }: { scheduler: SchedulerData }) {
       )}
     </div>
   )
-}
-
-function formatRelativeTime(isoString: string): string {
-  const now = Date.now()
-  const then = new Date(isoString).getTime()
-  const diffSec = Math.floor((now - then) / 1000)
-  if (diffSec < 60) return `${diffSec}s ago`
-  const diffMin = Math.floor(diffSec / 60)
-  if (diffMin < 60) return `${diffMin}m ago`
-  const diffHours = Math.floor(diffMin / 60)
-  if (diffHours < 24) return `${diffHours}h ago`
-  const diffDays = Math.floor(diffHours / 24)
-  return `${diffDays}d ago`
 }
 
 function getStatusColor(run: GitHubRun): { dot: string; text: string; conclusion: string; status: string } {
