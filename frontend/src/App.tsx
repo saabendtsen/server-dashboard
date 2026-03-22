@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { FeedbackButton } from './components/FeedbackButton'
-import type { TabId, SystemData, HealthcheckResult, ServiceData, SchedulerData, GitHubRun, StatusResponse } from './types'
+import { useDashboardData } from './hooks/useDashboardData'
+import type { TabId, SystemData, HealthcheckResult, ServiceData, SchedulerData, GitHubRun } from './types'
 import { formatBytes, formatUptime, formatContainerUptime, formatTimestamp, formatRelativeTime, repoShortName } from './utils/formatters'
 
 const TABS: { id: TabId; label: string }[] = [
@@ -319,30 +320,7 @@ function GitHubActionsTab({ runs }: { runs: GitHubRun[] }) {
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabId>('overview')
-  const [data, setData] = useState<StatusResponse | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [refreshing, setRefreshing] = useState(false)
-
-  useEffect(() => {
-    fetch('/server-dashboard/api/status')
-      .then(res => res.json())
-      .then(setData)
-      .catch(err => setError(err.message))
-  }, [])
-
-  const handleRefresh = async () => {
-    setRefreshing(true)
-    setError(null)
-    try {
-      const res = await fetch('/server-dashboard/api/refresh', { method: 'POST' })
-      const freshData = await res.json()
-      setData(freshData)
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Refresh failed')
-    } finally {
-      setRefreshing(false)
-    }
-  }
+  const { data, error, refreshing, refresh } = useDashboardData()
 
   return (
     <div className="bg-gray-50 dark:bg-gray-900 min-h-screen">
@@ -357,7 +335,7 @@ export default function App() {
             )}
             <button
               data-testid="refresh-button"
-              onClick={handleRefresh}
+              onClick={refresh}
               disabled={refreshing}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-primary text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
