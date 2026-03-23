@@ -37,16 +37,21 @@ ORDER BY timestamp ASC
 
 Group events by `run_id` in Python and attach as `events` array on each run dict. Runs with no events get an empty array.
 
+### Messages Query (`scheduler_collector.py`)
+
+Add a `get_run_messages(run_id: int, db_path: str = DEFAULT_DB_PATH)` function that reuses the existing read-only `?mode=ro` URI pattern and error handling. Returns the parsed JSON array, `None` if messages is NULL, or raises `ValueError` if run not found.
+
 ### New Endpoint (`main.py`)
 
 ```
 GET /api/runs/{run_id}/messages
 ```
 
-- Queries `SELECT messages FROM runs WHERE id = ?`
-- Returns 200 with raw JSON body
+- Calls `get_run_messages()` from `scheduler_collector.py`
+- Returns 200 with the messages JSON array directly (no envelope)
 - Returns 404 if run ID not found
-- Returns 204 if `messages` is NULL
+- Returns 204 if `messages` is NULL (expired by retention)
+- DB connection errors return 503
 
 No caching — direct DB read on each request.
 
@@ -81,6 +86,19 @@ export interface RunEvent {
 }
 ```
 
+### New `AgentMessage` (for messages modal)
+
+```typescript
+export interface AgentMessage {
+  role: string       // "user", "assistant", "system"
+  content: string    // message text (may contain markdown)
+}
+```
+
+The messages endpoint returns a JSON array of these objects directly (no envelope). The array may contain additional fields — the modal should render `role` and `content` and ignore the rest.
+
+**Note:** `SchedulerData` (`{ health, runs }`) does not change — the nested `SchedulerRun` type update propagates automatically.
+
 ## Frontend Components
 
 ### Run Card Updates (`SchedulerTab.tsx`)
@@ -93,9 +111,17 @@ export interface RunEvent {
 
 - Receives `events: RunEvent[]`
 - Vertical timeline with thin left border connecting events
-- Each event: formatted timestamp, event type label/icon, parsed `detail` JSON as readable text
+- Each event: formatted timestamp, event type label/icon, detail rendered as readable text
 - Event type → icon/color mapping (similar to `OutcomeBadge` pattern)
-- Event type examples: `session_started`, `label_added`, `label_removed`, `validation_checked`, `pr_found`, `recheck_resolved`
+- Event type examples and their `detail` JSON shapes:
+  - `session_started`: `{"session_id": "abc123"}` → "Session started"
+  - `label_added`: `{"label": "ai-implementing"}` → "Label added: ai-implementing"
+  - `label_removed`: `{"label": "ai-planning"}` → "Label removed: ai-planning"
+  - `pr_found`: `{"pr_number": 44}` → "PR found: #44"
+  - `validation_checked`: `{"passed": true, "reason": "..."}` → "Validation passed" / "Validation failed"
+  - `recheck_resolved`: `{"resolution": "merged"}` → "Recheck resolved: merged"
+  - `session_completed`: `{"outcome": "completed"}` → "Session completed"
+- Unknown event types: render event_type as-is with raw detail string as fallback
 
 ### New: `MessagesModal.tsx` (`shared/`)
 
