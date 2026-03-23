@@ -1,0 +1,16 @@
+{
+  "planPath": "docs/superpowers/plans/2026-03-23-scheduler-schema-update.md",
+  "tasks": [
+    {"id": 1, "subject": "Task 1: Backend — Add validation_reason to collector", "status": "pending"},
+    {"id": 2, "subject": "Task 2: Backend — Add run_events nested in collector", "status": "pending", "blockedBy": [1]},
+    {"id": 3, "subject": "Task 3: Backend — Add /api/runs/{id}/messages endpoint", "status": "pending", "blockedBy": [2]},
+    {"id": 4, "subject": "Task 4: Frontend — Update types and add validation_reason to run cards", "status": "pending"},
+    {"id": 5, "subject": "Task 5: Frontend — RunEventTimeline component", "status": "pending"},
+    {"id": 6, "subject": "Task 6: Frontend — Wire event timeline into SchedulerTab", "status": "pending", "blockedBy": [4, 5]},
+    {"id": 7, "subject": "Task 7: Frontend — MessagesModal component", "status": "pending"},
+    {"id": 8, "subject": "Task 8: Frontend — Wire MessagesModal into SchedulerTab", "status": "pending", "blockedBy": [4, 7]},
+    {"id": 9, "subject": "Task 9: E2E — Update Playwright tests", "status": "pending", "blockedBy": [6, 8]},
+    {"id": 10, "subject": "Task 10: Update backend API test fixtures", "status": "pending", "blockedBy": [2]}
+  ],
+  "lastUpdated": "2026-03-23T00:00:00Z"
+}
