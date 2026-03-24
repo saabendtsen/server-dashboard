@@ -48,6 +48,11 @@ const MOCK_STATUS = {
         outcome: 'completed',
         pr_number: null,
         notes: null,
+        validation_reason: 'Plan file found in comments',
+        events: [
+          { id: 1, timestamp: '2026-03-20T10:20:03Z', event_type: 'session_started', detail: null },
+          { id: 2, timestamp: '2026-03-20T10:22:31Z', event_type: 'session_completed', detail: '{"outcome": "completed"}' },
+        ],
       },
       {
         id: 88,
@@ -59,6 +64,8 @@ const MOCK_STATUS = {
         outcome: 'failed',
         pr_number: 12,
         notes: null,
+        validation_reason: 'No PR found for issue',
+        events: [],
       },
     ],
   },
@@ -244,6 +251,61 @@ test('refresh button triggers POST /api/refresh and updates data', async ({ page
 
   // After refresh, data should update
   await expect(page.getByTestId('cpu-value')).toHaveText('99.9%')
+})
+
+test('AI Scheduler tab shows validation reason and expandable events', async ({ page }) => {
+  await page.goto('/server-dashboard/')
+  await page.getByRole('tab', { name: 'AI Scheduler' }).click()
+
+  // Validation reason visible
+  await expect(page.getByText('Plan file found in comments')).toBeVisible()
+  await expect(page.getByText('No PR found for issue')).toBeVisible()
+
+  // Events toggle on first run (has events)
+  const firstRun = page.getByTestId('scheduler-run').nth(0)
+  const eventsToggle = firstRun.getByTestId('toggle-events')
+  await expect(eventsToggle).toBeVisible()
+  await expect(eventsToggle).toHaveText('Events (2)')
+
+  // Expand events
+  await eventsToggle.click()
+  await expect(firstRun.getByText('Session started')).toBeVisible()
+  await expect(firstRun.getByText(/Session completed/)).toBeVisible()
+
+  // Collapse events
+  await eventsToggle.click()
+  await expect(firstRun.getByText('Session started')).not.toBeVisible()
+
+  // Second run has no events — no toggle
+  const secondRun = page.getByTestId('scheduler-run').nth(1)
+  await expect(secondRun.locator('[data-testid="toggle-events"]')).toHaveCount(0)
+})
+
+test('AI Scheduler tab view messages button opens modal', async ({ page }) => {
+  // Mock the messages endpoint
+  await page.route('**/api/runs/89/messages', (route) =>
+    route.fulfill({
+      json: [
+        { role: 'user', content: 'Plan this feature' },
+        { role: 'assistant', content: 'I will create a plan' },
+      ],
+    })
+  )
+
+  await page.goto('/server-dashboard/')
+  await page.getByRole('tab', { name: 'AI Scheduler' }).click()
+
+  // Click view messages on first run
+  const firstRun = page.getByTestId('scheduler-run').nth(0)
+  await firstRun.getByTestId('view-messages').click()
+
+  // Modal should open with messages
+  await expect(page.getByText('Plan this feature')).toBeVisible()
+  await expect(page.getByText('I will create a plan')).toBeVisible()
+
+  // Close modal
+  await page.getByTestId('close-modal').click()
+  await expect(page.getByText('Plan this feature')).not.toBeVisible()
 })
 
 test('refresh button shows spinner while refreshing', async ({ page }) => {

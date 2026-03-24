@@ -32,6 +32,18 @@ export interface ServiceData {
   healthcheck: HealthcheckResult | null
 }
 
+export interface RunEvent {
+  id: number
+  timestamp: string
+  event_type: string
+  detail: string | null
+}
+
+export interface AgentMessage {
+  role: string
+  content: string
+}
+
 export interface SchedulerRun {
   id: number
   repo: string
@@ -42,6 +54,8 @@ export interface SchedulerRun {
   outcome: string
   pr_number: number | null
   notes: string | null
+  validation_reason: string | null
+  events: RunEvent[]
 }
 
 export interface SchedulerData {
