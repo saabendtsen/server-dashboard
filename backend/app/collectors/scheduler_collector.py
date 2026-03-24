@@ -29,10 +29,31 @@ async def collect(db_path: str = DEFAULT_DB_PATH) -> dict[str, Any]:
                 "FROM runs ORDER BY started_at DESC LIMIT 20"
             )
             rows = await cursor.fetchall()
+            runs = [dict(row) for row in rows]
+
+            # Fetch events for these runs
+            if runs:
+                run_ids = [r["id"] for r in runs]
+                placeholders = ",".join("?" * len(run_ids))
+                event_cursor = await db.execute(
+                    f"SELECT id, run_id, timestamp, event_type, detail "
+                    f"FROM run_events WHERE run_id IN ({placeholders}) "
+                    f"ORDER BY timestamp ASC",
+                    run_ids,
+                )
+                event_rows = await event_cursor.fetchall()
+
+                events_by_run: dict[int, list[dict]] = {r["id"]: [] for r in runs}
+                for evt in event_rows:
+                    evt_dict = dict(evt)
+                    rid = evt_dict.pop("run_id")
+                    if rid in events_by_run:
+                        events_by_run[rid].append(evt_dict)
+
+                for run in runs:
+                    run["events"] = events_by_run[run["id"]]
     except Exception:
         return {"health": "unknown", "runs": []}
-
-    runs = [dict(row) for row in rows]
 
     if runs:
         latest_outcome = runs[0]["outcome"]

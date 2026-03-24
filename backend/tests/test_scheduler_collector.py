@@ -210,3 +210,40 @@ async def test_collect_validation_reason_null(tmp_path):
     db_path = _create_db(tmp_path, rows)
     result = await collect(db_path=str(db_path))
     assert result["runs"][0]["validation_reason"] is None
+
+
+# --- run_events ---
+
+
+@pytest.mark.asyncio
+async def test_collect_includes_events_per_run(tmp_path):
+    rows = [
+        (1, "owner/repo", 10, "implementation", "2026-03-20T10:00:00Z", "2026-03-20T10:30:00Z", "completed", 5, None, None),
+        (2, "owner/repo", 11, "planning", "2026-03-21T10:00:00Z", "2026-03-21T10:30:00Z", "completed", None, None, None),
+    ]
+    events = [
+        (1, "2026-03-20T10:00:00Z", "session_started", '{"session_id": "abc"}'),
+        (1, "2026-03-20T10:15:00Z", "pr_found", '{"pr_number": 5}'),
+        (2, "2026-03-21T10:00:00Z", "session_started", None),
+    ]
+    db_path = _create_db(tmp_path, rows, events)
+    result = await collect(db_path=str(db_path))
+
+    # Run 2 (newest) should have 1 event
+    assert len(result["runs"][0]["events"]) == 1
+    assert result["runs"][0]["events"][0]["event_type"] == "session_started"
+
+    # Run 1 should have 2 events, ordered by timestamp
+    assert len(result["runs"][1]["events"]) == 2
+    assert result["runs"][1]["events"][0]["event_type"] == "session_started"
+    assert result["runs"][1]["events"][1]["event_type"] == "pr_found"
+
+
+@pytest.mark.asyncio
+async def test_collect_run_with_no_events_gets_empty_array(tmp_path):
+    rows = [
+        (1, "owner/repo", 10, "planning", "2026-03-20T10:00:00Z", "2026-03-20T10:30:00Z", "completed", None, None, None),
+    ]
+    db_path = _create_db(tmp_path, rows)  # no events
+    result = await collect(db_path=str(db_path))
+    assert result["runs"][0]["events"] == []
