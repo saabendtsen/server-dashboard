@@ -43,6 +43,8 @@ FAKE_SCHEDULER = {
             "outcome": "completed",
             "pr_number": None,
             "notes": None,
+            "validation_reason": "Plan found in comments",
+            "events": [],
         }
     ],
 }
