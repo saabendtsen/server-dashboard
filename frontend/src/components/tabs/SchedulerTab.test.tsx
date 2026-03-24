@@ -16,6 +16,8 @@ const fixture: SchedulerData = {
       outcome: 'completed',
       pr_number: 15,
       notes: null,
+      validation_reason: 'PR #15 open, checks passed',
+      events: [],
     },
   ],
 }
@@ -45,5 +47,19 @@ describe('SchedulerTab', () => {
     render(<SchedulerTab scheduler={fixture} />)
     expect(screen.getByText('#42')).toBeInTheDocument()
     expect(screen.getByText('#15')).toBeInTheDocument()
+  })
+
+  it('renders validation reason when present', () => {
+    render(<SchedulerTab scheduler={fixture} />)
+    expect(screen.getByText('PR #15 open, checks passed')).toBeInTheDocument()
+  })
+
+  it('does not render validation reason when null', () => {
+    const noReason = {
+      ...fixture,
+      runs: [{ ...fixture.runs[0], validation_reason: null }],
+    }
+    render(<SchedulerTab scheduler={noReason} />)
+    expect(screen.queryByTestId('validation-reason')).not.toBeInTheDocument()
   })
 })
