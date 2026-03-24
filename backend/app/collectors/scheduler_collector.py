@@ -25,7 +25,7 @@ async def collect(db_path: str = DEFAULT_DB_PATH) -> dict[str, Any]:
         async with aiosqlite.connect(uri, uri=True) as db:
             db.row_factory = aiosqlite.Row
             cursor = await db.execute(
-                "SELECT id, repo, issue_number, session_type, started_at, ended_at, outcome, pr_number, notes "
+                "SELECT id, repo, issue_number, session_type, started_at, ended_at, outcome, pr_number, notes, validation_reason "
                 "FROM runs ORDER BY started_at DESC LIMIT 20"
             )
             rows = await cursor.fetchall()

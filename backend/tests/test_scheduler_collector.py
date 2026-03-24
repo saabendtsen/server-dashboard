@@ -7,7 +7,7 @@ import pytest
 from app.collectors.scheduler_collector import collect
 
 
-def _create_db(tmp_path: Path, rows: list[tuple] | None = None) -> Path:
+def _create_db(tmp_path: Path, rows: list[tuple] | None = None, events: list[tuple] | None = None) -> Path:
     """Create a temporary SQLite DB with the runs table schema."""
     db_path = tmp_path / "history.db"
     conn = sqlite3.connect(str(db_path))
@@ -21,13 +21,30 @@ def _create_db(tmp_path: Path, rows: list[tuple] | None = None) -> Path:
             ended_at TEXT,
             outcome TEXT,
             pr_number INTEGER,
-            notes TEXT
+            notes TEXT,
+            validation_reason TEXT,
+            messages TEXT
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE run_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            run_id INTEGER NOT NULL REFERENCES runs(id),
+            timestamp TEXT NOT NULL,
+            event_type TEXT NOT NULL,
+            detail TEXT
         )
     """)
     if rows:
         conn.executemany(
-            "INSERT INTO runs (id, repo, issue_number, session_type, started_at, ended_at, outcome, pr_number, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO runs (id, repo, issue_number, session_type, started_at, ended_at, outcome, pr_number, notes, validation_reason) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             rows,
+        )
+    if events:
+        conn.executemany(
+            "INSERT INTO run_events (run_id, timestamp, event_type, detail) VALUES (?, ?, ?, ?)",
+            events,
         )
     conn.commit()
     conn.close()
@@ -37,9 +54,9 @@ def _create_db(tmp_path: Path, rows: list[tuple] | None = None) -> Path:
 @pytest.mark.asyncio
 async def test_collect_returns_runs_sorted_newest_first(tmp_path):
     rows = [
-        (1, "owner/repo-a", 10, "planning", "2026-03-18T08:00:00Z", "2026-03-18T08:30:00Z", "completed", None, None),
-        (2, "owner/repo-b", 20, "implementation", "2026-03-19T10:00:00Z", "2026-03-19T11:00:00Z", "completed", 5, None),
-        (3, "owner/repo-a", 15, "planning", "2026-03-20T12:00:00Z", "2026-03-20T12:20:00Z", "failed", None, "error"),
+        (1, "owner/repo-a", 10, "planning", "2026-03-18T08:00:00Z", "2026-03-18T08:30:00Z", "completed", None, None, None),
+        (2, "owner/repo-b", 20, "implementation", "2026-03-19T10:00:00Z", "2026-03-19T11:00:00Z", "completed", 5, None, None),
+        (3, "owner/repo-a", 15, "planning", "2026-03-20T12:00:00Z", "2026-03-20T12:20:00Z", "failed", None, "error", None),
     ]
     db_path = _create_db(tmp_path, rows)
     result = await collect(db_path=str(db_path))
@@ -54,7 +71,7 @@ async def test_collect_returns_runs_sorted_newest_first(tmp_path):
 @pytest.mark.asyncio
 async def test_collect_limits_to_20_runs(tmp_path):
     rows = [
-        (i, "owner/repo", i, "planning", f"2026-03-{i:02d}T10:00:00Z", f"2026-03-{i:02d}T10:30:00Z", "completed", None, None)
+        (i, "owner/repo", i, "planning", f"2026-03-{i:02d}T10:00:00Z", f"2026-03-{i:02d}T10:30:00Z", "completed", None, None, None)
         for i in range(1, 26)
     ]
     db_path = _create_db(tmp_path, rows)
@@ -68,7 +85,7 @@ async def test_collect_limits_to_20_runs(tmp_path):
 @pytest.mark.asyncio
 async def test_collect_run_fields(tmp_path):
     rows = [
-        (1, "saabendtsen/ai-scheduler", 42, "implementation", "2026-03-19T10:00:00Z", "2026-03-19T11:00:00Z", "completed", 7, "some notes"),
+        (1, "saabendtsen/ai-scheduler", 42, "implementation", "2026-03-19T10:00:00Z", "2026-03-19T11:00:00Z", "completed", 7, "some notes", None),
     ]
     db_path = _create_db(tmp_path, rows)
     result = await collect(db_path=str(db_path))
@@ -91,7 +108,7 @@ async def test_collect_run_fields(tmp_path):
 @pytest.mark.asyncio
 async def test_health_completed_is_healthy(tmp_path):
     rows = [
-        (1, "owner/repo", 1, "planning", "2026-03-20T10:00:00Z", "2026-03-20T10:30:00Z", "completed", None, None),
+        (1, "owner/repo", 1, "planning", "2026-03-20T10:00:00Z", "2026-03-20T10:30:00Z", "completed", None, None, None),
     ]
     db_path = _create_db(tmp_path, rows)
     result = await collect(db_path=str(db_path))
@@ -101,7 +118,7 @@ async def test_health_completed_is_healthy(tmp_path):
 @pytest.mark.asyncio
 async def test_health_failed_is_unhealthy(tmp_path):
     rows = [
-        (1, "owner/repo", 1, "planning", "2026-03-20T10:00:00Z", "2026-03-20T10:30:00Z", "failed", None, None),
+        (1, "owner/repo", 1, "planning", "2026-03-20T10:00:00Z", "2026-03-20T10:30:00Z", "failed", None, None, None),
     ]
     db_path = _create_db(tmp_path, rows)
     result = await collect(db_path=str(db_path))
@@ -112,7 +129,7 @@ async def test_health_failed_is_unhealthy(tmp_path):
 @pytest.mark.parametrize("outcome", ["clarification", "timeout", "running"])
 async def test_health_warning_outcomes(tmp_path, outcome):
     rows = [
-        (1, "owner/repo", 1, "planning", "2026-03-20T10:00:00Z", "2026-03-20T10:30:00Z", outcome, None, None),
+        (1, "owner/repo", 1, "planning", "2026-03-20T10:00:00Z", "2026-03-20T10:30:00Z", outcome, None, None, None),
     ]
     db_path = _create_db(tmp_path, rows)
     result = await collect(db_path=str(db_path))
@@ -131,8 +148,8 @@ async def test_health_empty_db_is_unknown(tmp_path):
 async def test_health_uses_latest_run_only(tmp_path):
     """Health should be based on the most recent run, not older ones."""
     rows = [
-        (1, "owner/repo", 1, "planning", "2026-03-18T10:00:00Z", "2026-03-18T10:30:00Z", "completed", None, None),
-        (2, "owner/repo", 2, "implementation", "2026-03-20T10:00:00Z", "2026-03-20T10:30:00Z", "failed", None, None),
+        (1, "owner/repo", 1, "planning", "2026-03-18T10:00:00Z", "2026-03-18T10:30:00Z", "completed", None, None, None),
+        (2, "owner/repo", 2, "implementation", "2026-03-20T10:00:00Z", "2026-03-20T10:30:00Z", "failed", None, None, None),
     ]
     db_path = _create_db(tmp_path, rows)
     result = await collect(db_path=str(db_path))
@@ -146,7 +163,7 @@ async def test_health_uses_latest_run_only(tmp_path):
 async def test_db_file_not_modified(tmp_path):
     """Collector must not modify the DB file (read-only mode)."""
     rows = [
-        (1, "owner/repo", 1, "planning", "2026-03-20T10:00:00Z", "2026-03-20T10:30:00Z", "completed", None, None),
+        (1, "owner/repo", 1, "planning", "2026-03-20T10:00:00Z", "2026-03-20T10:30:00Z", "completed", None, None, None),
     ]
     db_path = _create_db(tmp_path, rows)
 
@@ -170,3 +187,26 @@ async def test_missing_db_returns_unknown(tmp_path):
     result = await collect(db_path=db_path)
     assert result["health"] == "unknown"
     assert result["runs"] == []
+
+
+# --- validation_reason ---
+
+
+@pytest.mark.asyncio
+async def test_collect_includes_validation_reason(tmp_path):
+    rows = [
+        (1, "owner/repo", 10, "implementation", "2026-03-20T10:00:00Z", "2026-03-20T10:30:00Z", "completed", 5, None, "PR #5 open, checks passed"),
+    ]
+    db_path = _create_db(tmp_path, rows)
+    result = await collect(db_path=str(db_path))
+    assert result["runs"][0]["validation_reason"] == "PR #5 open, checks passed"
+
+
+@pytest.mark.asyncio
+async def test_collect_validation_reason_null(tmp_path):
+    rows = [
+        (1, "owner/repo", 10, "planning", "2026-03-20T10:00:00Z", "2026-03-20T10:30:00Z", "completed", None, None, None),
+    ]
+    db_path = _create_db(tmp_path, rows)
+    result = await collect(db_path=str(db_path))
+    assert result["runs"][0]["validation_reason"] is None
