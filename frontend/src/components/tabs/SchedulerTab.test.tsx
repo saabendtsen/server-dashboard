@@ -87,4 +87,11 @@ describe('SchedulerTab', () => {
     render(<SchedulerTab scheduler={fixture} />) // fixture has events: []
     expect(screen.queryByTestId('toggle-events')).not.toBeInTheDocument()
   })
+
+  it('opens messages modal when view messages button is clicked', () => {
+    vi.spyOn(global, 'fetch').mockImplementation(() => new Promise(() => {}))
+    render(<SchedulerTab scheduler={fixture} />)
+    fireEvent.click(screen.getByTestId('view-messages'))
+    expect(screen.getByTestId('messages-loading')).toBeInTheDocument()
+  })
 })

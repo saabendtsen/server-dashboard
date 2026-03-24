@@ -1,12 +1,14 @@
 import { useState } from 'react'
 import type { SchedulerData } from '../../types'
 import { formatTimestamp, repoShortName } from '../../utils/formatters'
+import { MessagesModal } from '../shared/MessagesModal'
 import { OutcomeBadge } from '../shared/OutcomeBadge'
 import { RunEventTimeline } from '../shared/RunEventTimeline'
 import { SchedulerHealthBadge } from '../shared/SchedulerHealthBadge'
 
 export function SchedulerTab({ scheduler }: { scheduler: SchedulerData }) {
   const [expandedRuns, setExpandedRuns] = useState<Set<number>>(new Set())
+  const [messagesRunId, setMessagesRunId] = useState<number | null>(null)
 
   const toggleExpand = (runId: number) => {
     setExpandedRuns(prev => {
@@ -73,21 +75,34 @@ export function SchedulerTab({ scheduler }: { scheduler: SchedulerData }) {
                   {run.ended_at && ` - ${formatTimestamp(run.ended_at)}`}
                 </span>
               </div>
-              {run.events.length > 0 && (
-                <>
-                  <button
-                    data-testid="toggle-events"
-                    onClick={() => toggleExpand(run.id)}
-                    className="text-xs text-primary hover:underline mt-2"
-                  >
-                    {expandedRuns.has(run.id) ? 'Hide events' : `Events (${run.events.length})`}
-                  </button>
-                  {expandedRuns.has(run.id) && <RunEventTimeline events={run.events} />}
-                </>
-              )}
+              <div className="flex gap-2 mt-2">
+                {run.events.length > 0 && (
+                  <>
+                    <button
+                      data-testid="toggle-events"
+                      onClick={() => toggleExpand(run.id)}
+                      className="text-xs text-primary hover:underline"
+                    >
+                      {expandedRuns.has(run.id) ? 'Hide events' : `Events (${run.events.length})`}
+                    </button>
+                  </>
+                )}
+                <button
+                  data-testid="view-messages"
+                  onClick={() => setMessagesRunId(run.id)}
+                  className="text-xs text-primary hover:underline"
+                >
+                  View messages
+                </button>
+              </div>
+              {expandedRuns.has(run.id) && run.events.length > 0 && <RunEventTimeline events={run.events} />}
             </div>
           ))}
         </div>
+      )}
+
+      {messagesRunId !== null && (
+        <MessagesModal runId={messagesRunId} onClose={() => setMessagesRunId(null)} />
       )}
     </div>
   )
