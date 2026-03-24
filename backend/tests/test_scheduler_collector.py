@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from app.collectors.scheduler_collector import collect
+from app.collectors.scheduler_collector import collect, get_run_messages
 
 
 def _create_db(tmp_path: Path, rows: list[tuple] | None = None, events: list[tuple] | None = None) -> Path:
@@ -247,3 +247,67 @@ async def test_collect_run_with_no_events_gets_empty_array(tmp_path):
     db_path = _create_db(tmp_path, rows)  # no events
     result = await collect(db_path=str(db_path))
     assert result["runs"][0]["events"] == []
+
+
+# --- get_run_messages ---
+
+
+@pytest.mark.asyncio
+async def test_get_run_messages_returns_json(tmp_path):
+    messages_json = '[{"role": "user", "content": "hello"}]'
+    conn = sqlite3.connect(str(tmp_path / "history.db"))
+    conn.execute("""
+        CREATE TABLE runs (
+            id INTEGER PRIMARY KEY, repo TEXT, issue_number INTEGER,
+            session_type TEXT, started_at TEXT, ended_at TEXT,
+            outcome TEXT, pr_number INTEGER, notes TEXT,
+            validation_reason TEXT, messages TEXT
+        )
+    """)
+    conn.execute(
+        "INSERT INTO runs (id, repo, issue_number, session_type, started_at, ended_at, outcome, messages) "
+        "VALUES (1, 'o/r', 1, 'planning', '2026-01-01', '2026-01-01', 'completed', ?)",
+        (messages_json,),
+    )
+    conn.commit()
+    conn.close()
+    result = await get_run_messages(1, str(tmp_path / "history.db"))
+    assert result == [{"role": "user", "content": "hello"}]
+
+
+@pytest.mark.asyncio
+async def test_get_run_messages_null_returns_none(tmp_path):
+    conn = sqlite3.connect(str(tmp_path / "history.db"))
+    conn.execute("""
+        CREATE TABLE runs (
+            id INTEGER PRIMARY KEY, repo TEXT, issue_number INTEGER,
+            session_type TEXT, started_at TEXT, ended_at TEXT,
+            outcome TEXT, pr_number INTEGER, notes TEXT,
+            validation_reason TEXT, messages TEXT
+        )
+    """)
+    conn.execute(
+        "INSERT INTO runs (id, repo, issue_number, session_type, started_at, ended_at, outcome) "
+        "VALUES (1, 'o/r', 1, 'planning', '2026-01-01', '2026-01-01', 'completed')",
+    )
+    conn.commit()
+    conn.close()
+    result = await get_run_messages(1, str(tmp_path / "history.db"))
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_get_run_messages_not_found_raises(tmp_path):
+    conn = sqlite3.connect(str(tmp_path / "history.db"))
+    conn.execute("""
+        CREATE TABLE runs (
+            id INTEGER PRIMARY KEY, repo TEXT, issue_number INTEGER,
+            session_type TEXT, started_at TEXT, ended_at TEXT,
+            outcome TEXT, pr_number INTEGER, notes TEXT,
+            validation_reason TEXT, messages TEXT
+        )
+    """)
+    conn.commit()
+    conn.close()
+    with pytest.raises(ValueError):
+        await get_run_messages(999, str(tmp_path / "history.db"))

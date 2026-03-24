@@ -4,9 +4,12 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.responses import Response
 
 from app.cache import get_cached, run_all_collectors
+from app.collectors.scheduler_collector import get_run_messages
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +71,19 @@ async def status():
 async def refresh():
     """Trigger immediate re-collection of all data sources."""
     return await run_all_collectors()
+
+
+@app.get("/api/runs/{run_id}/messages")
+async def run_messages(run_id: int):
+    try:
+        messages = await get_run_messages(run_id)
+    except ValueError:
+        return JSONResponse(status_code=404, content={"detail": "Run not found"})
+    except Exception:
+        return JSONResponse(status_code=503, content={"detail": "Database unavailable"})
+    if messages is None:
+        return Response(status_code=204)
+    return messages
 
 
 if STATIC_DIR.is_dir():

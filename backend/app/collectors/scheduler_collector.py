@@ -1,3 +1,4 @@
+import json
 import os
 from pathlib import Path
 from typing import Any
@@ -62,3 +63,16 @@ async def collect(db_path: str = DEFAULT_DB_PATH) -> dict[str, Any]:
         health = "unknown"
 
     return {"health": health, "runs": runs}
+
+
+async def get_run_messages(run_id: int, db_path: str = DEFAULT_DB_PATH) -> list[dict] | None:
+    """Fetch agent messages for a specific run. Returns None if NULL, raises ValueError if not found."""
+    uri = f"file:{db_path}?mode=ro"
+    async with aiosqlite.connect(uri, uri=True) as db:
+        cursor = await db.execute("SELECT messages FROM runs WHERE id = ?", (run_id,))
+        row = await cursor.fetchone()
+        if row is None:
+            raise ValueError(f"Run {run_id} not found")
+        if row[0] is None:
+            return None
+        return json.loads(row[0])
