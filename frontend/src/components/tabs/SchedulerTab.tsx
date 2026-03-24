@@ -44,7 +44,14 @@ export function SchedulerTab({ scheduler }: { scheduler: SchedulerData }) {
                     </a>
                   )}
                 </div>
-                <OutcomeBadge outcome={run.outcome} />
+                <div className="flex flex-col items-end gap-1">
+                  <OutcomeBadge outcome={run.outcome} />
+                  {run.validation_reason && (
+                    <span data-testid="validation-reason" className="text-xs text-gray-500 dark:text-gray-400">
+                      {run.validation_reason}
+                    </span>
+                  )}
+                </div>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-xs text-gray-500 dark:text-gray-400">{run.session_type}</span>
