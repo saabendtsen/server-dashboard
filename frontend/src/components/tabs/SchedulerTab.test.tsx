@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { describe, it, expect, vi } from 'vitest'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { SchedulerTab } from './SchedulerTab'
 import type { SchedulerData } from '../../types'
 
@@ -61,5 +61,30 @@ describe('SchedulerTab', () => {
     }
     render(<SchedulerTab scheduler={noReason} />)
     expect(screen.queryByTestId('validation-reason')).not.toBeInTheDocument()
+  })
+
+  it('shows event timeline when events button is clicked', () => {
+    const fixtureWithEvents: SchedulerData = {
+      health: 'healthy',
+      runs: [
+        {
+          ...fixture.runs[0],
+          events: [
+            { id: 1, timestamp: '2026-03-20T10:00:00Z', event_type: 'session_started', detail: null },
+            { id: 2, timestamp: '2026-03-20T10:30:00Z', event_type: 'session_completed', detail: '{"outcome": "completed"}' },
+          ],
+        },
+      ],
+    }
+    render(<SchedulerTab scheduler={fixtureWithEvents} />)
+    expect(screen.queryByTestId('timeline-event')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByTestId('toggle-events'))
+    expect(screen.getAllByTestId('timeline-event')).toHaveLength(2)
+  })
+
+  it('hides events button when run has no events', () => {
+    render(<SchedulerTab scheduler={fixture} />) // fixture has events: []
+    expect(screen.queryByTestId('toggle-events')).not.toBeInTheDocument()
   })
 })

@@ -1,9 +1,22 @@
+import { useState } from 'react'
 import type { SchedulerData } from '../../types'
 import { formatTimestamp, repoShortName } from '../../utils/formatters'
 import { OutcomeBadge } from '../shared/OutcomeBadge'
+import { RunEventTimeline } from '../shared/RunEventTimeline'
 import { SchedulerHealthBadge } from '../shared/SchedulerHealthBadge'
 
 export function SchedulerTab({ scheduler }: { scheduler: SchedulerData }) {
+  const [expandedRuns, setExpandedRuns] = useState<Set<number>>(new Set())
+
+  const toggleExpand = (runId: number) => {
+    setExpandedRuns(prev => {
+      const next = new Set(prev)
+      if (next.has(runId)) next.delete(runId)
+      else next.add(runId)
+      return next
+    })
+  }
+
   return (
     <div className="space-y-4">
       <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm border border-gray-100 dark:border-gray-700">
@@ -60,6 +73,18 @@ export function SchedulerTab({ scheduler }: { scheduler: SchedulerData }) {
                   {run.ended_at && ` - ${formatTimestamp(run.ended_at)}`}
                 </span>
               </div>
+              {run.events.length > 0 && (
+                <>
+                  <button
+                    data-testid="toggle-events"
+                    onClick={() => toggleExpand(run.id)}
+                    className="text-xs text-primary hover:underline mt-2"
+                  >
+                    {expandedRuns.has(run.id) ? 'Hide events' : `Events (${run.events.length})`}
+                  </button>
+                  {expandedRuns.has(run.id) && <RunEventTimeline events={run.events} />}
+                </>
+              )}
             </div>
           ))}
         </div>
