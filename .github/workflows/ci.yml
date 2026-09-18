@@ -1,0 +1,125 @@
+name: CI
+
+# Runs on the trusted development-PC CI lane only. Every job requests the exact
+# lane labels, and the pull-request guard keeps fork code off the runner.
+#
+# This repository had no workflow at all: the running container on `homelab` was
+# built on the server from this working copy, with no registry reference and no
+# published package. The image is now published to GHCR as an immutable digest,
+# which is the identity the development-PC deployment lane converges.
+#
+# `saabendtsen/server-dashboard` is user-owned, so it reaches the lane through a
+# repository-scoped listener declared in `github.user_repository_admissions` of
+# `homelab-workspace`'s `config/dev-pc-ci.json`, not through the
+# `Wibholm-solutions` runner group. The package is therefore
+# `ghcr.io/saabendtsen/server-dashboard`, and it is public so the deployment
+# host can pull it anonymously with no registry credential.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: dev-pc-ci-${{ github.repository }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    # Pull requests build the image but never publish it, so a broken Dockerfile
+    # is caught before it reaches main without granting fork code a registry
+    # credential.
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, linux, x64, dev-pc, ci]
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the image without publishing it
+        shell: bash
+        run: |
+          set -euo pipefail
+          # buildx keeps builder state under $DOCKER_CONFIG, and the lane host's
+          # home directory is read-only, so the default location fails with
+          # "read-only file system" before the build starts. Relocating the whole
+          # Docker config is what the publish job already does for its registry
+          # credential; the build needs it for the same reason.
+          export DOCKER_CONFIG="$(mktemp -d /dev/shm/server-dashboard-build.XXXXXX)"
+          chmod 0700 "$DOCKER_CONFIG"
+          trap 'rm -rf -- "$DOCKER_CONFIG"' EXIT
+          docker buildx build --file Dockerfile --tag "server-dashboard:pr-${GITHUB_SHA}" .
+
+  publish:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, linux, x64, dev-pc, ci]
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      # The digest is the deployment identity. Exposing it as a job output is what
+      # lets a promotion request name an image by identity rather than by tag.
+      digest: ${{ steps.publish.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enforce zero-spend gate
+        shell: bash
+        run: /usr/local/lib/homelab-ci/assert-zero-spend-gate.sh
+
+      - name: Build and publish a digest-identified image with open attestations
+        id: publish
+        shell: bash
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          repository="${GITHUB_REPOSITORY,,}"
+          # Provenance tag only. The digest is the identity, and no `latest` or
+          # semantic alias is published, so no alias can authorise a deployment.
+          image="ghcr.io/${repository}:sha-${GITHUB_SHA}"
+          export DOCKER_CONFIG="$(mktemp -d /dev/shm/server-dashboard-docker.XXXXXX)"
+          chmod 0700 "$DOCKER_CONFIG"
+          cleanup_registry_auth() {
+            docker logout ghcr.io >/dev/null 2>&1 || true
+            rm -rf -- "$DOCKER_CONFIG"
+          }
+          trap cleanup_registry_auth EXIT
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          docker buildx build \
+            --file Dockerfile \
+            --tag "$image" \
+            --sbom=true \
+            --provenance=mode=max \
+            --push \
+            .
+          digest="$(docker buildx imagetools inspect "$image" --format '{{json .Manifest.Digest}}' | tr -d '"')"
+          sbom_json="$(docker buildx imagetools inspect "$image" --format '{{json .SBOM.SPDX}}')"
+          if ! printf '%s\n' "$sbom_json" | jq -e '.SPDXID | type == "string" and length > 0' >/dev/null; then
+            echo 'published image is missing an SPDX SBOM' >&2
+            exit 1
+          fi
+          echo 'verified-sbom-spdx'
+          provenance_json="$(docker buildx imagetools inspect "$image" --format '{{json .Provenance.SLSA}}')"
+          if ! printf '%s\n' "$provenance_json" | jq -e \
+            '(.buildType // .buildDefinition.buildType // .predicate.buildType) | type == "string" and length > 0' >/dev/null; then
+            echo 'published image is missing SLSA provenance' >&2
+            exit 1
+          fi
+          echo 'verified-slsa-provenance'
+          if ! printf '%s\n' "$provenance_json" | jq -e \
+            --arg source_commit "$GITHUB_SHA" \
+            --arg source_repository "$repository" \
+            'tostring | ascii_downcase | contains($source_commit) and contains($source_repository)' >/dev/null; then
+            echo 'SLSA provenance is not bound to the source repository and commit' >&2
+            exit 1
+          fi
+          echo 'verified-slsa-provenance-source'
+          printf 'digest=%s\n' "$digest" >> "$GITHUB_OUTPUT"
+          echo "published ghcr.io/${repository}@${digest}"
+          {
+            echo "### Published image"
+            echo
+            echo "- digest: \`ghcr.io/${repository}@${digest}\`"
+            echo "- provenance tag: \`sha-${GITHUB_SHA}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
