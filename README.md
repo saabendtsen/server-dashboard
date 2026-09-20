@@ -70,6 +70,12 @@ Containers opt into HTTP health checks with the Docker label
 `dashboard.healthcheck.url`. The compose file mounts `/var/run/docker.sock`
 read-only so the Services tab can list containers.
 
+The interface a deployment authority may rely on — image and process, port,
+health endpoint, configuration, the read-only Docker socket, and what a rollback
+may assume — is `docs/runtime-contract.md`. This repository does not deploy;
+server-specific desired state and convergence belong to
+`saabendtsen/home-server`.
+
 ## Data and privacy
 
 The dashboard reads host metrics, container metadata, the scheduler database and
