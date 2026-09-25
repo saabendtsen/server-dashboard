@@ -75,6 +75,7 @@ health endpoint, configuration, the read-only Docker socket, and what a rollback
 may assume — is `docs/runtime-contract.md`. This repository does not deploy;
 server-specific desired state and convergence belong to
 `saabendtsen/home-server`.
+After a merge to `main`, CI requests promotion of the published image.
 
 ## Data and privacy
 
